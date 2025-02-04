@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pair Code</title>
+  <title>Pʟᴀᴛɪɴᴜᴍ-V2 Pair Code</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   <style>
     * {
@@ -18,10 +18,23 @@
       background: url('https://i.imgur.com/74NG4nf.jpeg') no-repeat center center/cover;
       height: 100vh;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
       align-items: center;
+      justify-content: center;
       overflow: hidden;
       position: relative;
+      text-align: center;
+    }
+
+    /* Header */
+    .header {
+      font-size: 24px;
+      font-weight: bold;
+      background: linear-gradient(45deg, #ff6ec4, #7873f5, #00d4ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-transform: uppercase;
+      margin-bottom: 20px;
     }
 
     /* Glassmorphic Box */
@@ -32,7 +45,6 @@
       width: 350px;
       backdrop-filter: blur(10px);
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-      text-align: center;
       color: white;
       animation: fadeIn 1s ease-in-out;
     }
@@ -100,6 +112,22 @@
       color: white;
     }
 
+    /* Footer */
+    .footer {
+      font-size: 14px;
+      margin-top: 20px;
+      font-weight: bold;
+      background: linear-gradient(45deg, #ff0000, #ff7300, #ffeb00, #48ff00, #00ffd9, #006aff, #cc00ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: rainbowText 4s infinite alternate;
+    }
+
+    @keyframes rainbowText {
+      0% { filter: hue-rotate(0deg); }
+      100% { filter: hue-rotate(360deg); }
+    }
+
     /* Floating Stars (Touch Effect) */
     .bubble {
       position: absolute;
@@ -124,15 +152,22 @@
 </head>
 <body>
 
+  <!-- Header -->
+  <div class="header">Pʟᴀᴛɪɴᴜᴍ-V2 Pair Code</div>
+
+  <!-- Main Content -->
   <div class="container">
     <h3>🔢 Link with Phone Number</h3>
     <p>Enter your number with country code</p>
     <div class="input-container">
-      <input type="number" id="number" placeholder="+94729xxxxxx">
+      <input type="number" id="number" placeholder="234808xxxxxx">
     </div>
     <button class="submit-btn" id="submit">Submit</button>
     <div id="pair"></div>
   </div>
+
+  <!-- Footer -->
+  <div class="footer">Made by Jupiterbold</div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.0.0-alpha.1/axios.min.js"></script>
   <script>
@@ -177,4 +212,4 @@
   </script>
 
 </body>
-      </html>
+</html>
