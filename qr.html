@@ -1,64 +1,167 @@
-<!-- Qr.html -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pʟᴀᴛɪɴᴜᴍ-V2 Pair via QR Code</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   <style>
-    /* Basic Styles */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Arial', sans-serif;
+    }
+
+    /* Background */
     body {
-      font-family: Arial, sans-serif;
       background: url('https://i.imgur.com/74NG4nf.jpeg') no-repeat center center/cover;
       height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      overflow: hidden;
+      position: relative;
       text-align: center;
-      color: white;
     }
+
+    /* Header */
+    .header {
+      font-size: 24px;
+      font-weight: bold;
+      background: linear-gradient(45deg, #ff6ec4, #7873f5, #00d4ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    /* Glassmorphic Box */
     .container {
-      background: rgba(0, 0, 0, 0.5);
-      padding: 30px;
-      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 15px;
+      padding: 25px;
+      width: 400px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      color: white;
+      animation: fadeIn 1s ease-in-out;
     }
+
+    /* QR Code */
     #qrImage {
       margin-top: 15px;
       border: 8px solid rgba(255, 255, 255, 0.2);
       border-radius: 15px;
-      width: 250px;
-      height: 250px;
+      width: 350px;
+      height: 350px;
+      display: none;
     }
+
+    /* Status Message */
     #status {
-      margin-top: 20px;
+      margin-top: 10px;
+      font-size: 16px;
+      color: #ff4444;
     }
+
+    /* Countdown */
+    .countdown {
+      margin-top: 15px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #ffffff;
+    }
+
+    /* Progress Bar */
+    .progress-bar {
+      margin-top: 10px;
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .progress {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #25d366, #ff4444);
+      transition: width 1s linear;
+    }
+
+    /* Back Button */
     #back {
+      display: inline-block;
       margin-top: 20px;
       color: white;
       text-decoration: none;
+      font-size: 16px;
+      padding: 8px 15px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #25d366, #128C7E);
+      transition: 0.3s;
     }
+
     #back:hover {
-      text-decoration: underline;
+      background: linear-gradient(135deg, #128C7E, #075e54);
+      transform: scale(1.05);
+    }
+
+    /* Footer */
+    .footer {
+      font-size: 14px;
+      margin-top: 20px;
+      font-weight: bold;
+      background: linear-gradient(45deg, #ff0000, #ff7300, #ffeb00, #48ff00, #00ffd9, #006aff, #cc00ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: rainbowText 4s infinite alternate;
+    }
+
+    @keyframes rainbowText {
+      0% { filter: hue-rotate(0deg); }
+      100% { filter: hue-rotate(360deg); }
+    }
+
+    /* Fade-in Animation */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
     }
   </style>
 </head>
 <body>
+
+  <!-- Header -->
+  <div class="header">Pʟᴀᴛɪɴᴜᴍ-V2 Pair via QR Code</div>
+
+  <!-- Main Content -->
   <div class="container">
-    <h1>Pair via QR Code</h1>
+    <h3>📷 Scan QR Code</h3>
     <p>Open WhatsApp on your phone and scan the QR code below:</p>
     <div id="pair">
       <p id="status">Loading QR code...</p>
-      <img id="qrImage" src="" alt="Scan this QR code with WhatsApp" style="display: none;">
+      <img id="qrImage" src="" alt="Scan this QR code with WhatsApp">
     </div>
+    <div class="countdown" id="countdown"></div>
+    <div class="progress-bar"><div class="progress" id="progress"></div></div>
     <a id="back" href="/">&#8592; Back to Home</a>
   </div>
 
+  <!-- Footer -->
+  <div class="footer">Made by Jupiterbold</div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.3.5/axios.min.js"></script>
   <script>
+    let expirationTime = 60; // QR code expiration time in seconds
+
     async function fetchQRCode() {
       const qrImage = document.getElementById("qrImage");
       const statusText = document.getElementById("status");
+      const countdown = document.getElementById("countdown");
+      const progress = document.getElementById("progress");
 
       try {
         const { data } = await axios('/qrCode');
@@ -66,6 +169,7 @@
           qrImage.src = data.qr;
           qrImage.style.display = 'block';
           statusText.style.display = 'none';
+          startCountdown(expirationTime, countdown, progress);
         } else {
           statusText.innerHTML = "❗ Unable to retrieve QR code. Please refresh the page.";
         }
@@ -75,7 +179,26 @@
       }
     }
 
+    function startCountdown(duration, countdown, progress) {
+      let timeLeft = duration;
+      countdown.innerHTML = `Expires in: ${timeLeft}s`;
+      progress.style.width = "100%";
+
+      let timer = setInterval(() => {
+        timeLeft--;
+        countdown.innerHTML = `Expires in: ${timeLeft}s`;
+        progress.style.width = `${(timeLeft / duration) * 100}%`;
+
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          countdown.innerHTML = "⚠️ QR Code Expired! Refreshing...";
+          setTimeout(fetchQRCode, 2000); // Refresh QR Code after 2s delay
+        }
+      }, 1000);
+    }
+
     window.onload = fetchQRCode;
   </script>
+
 </body>
 </html>
