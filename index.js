@@ -34,7 +34,7 @@ app.get('/pair', (req, res) => {
 
 // Route for 'Qr.html' (QR code method)
 app.get('/qr', (req, res) => {
-  res.sendFile(path.join(__dirname, 'Qr.html'));
+  res.sendFile(path.join(__dirname, 'qr.html'));
 });
 
 // Home page where users can choose the pairing method
