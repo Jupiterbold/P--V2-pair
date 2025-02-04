@@ -16,14 +16,14 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname))); // Serve static files (CSS, JS, etc.)
 
 // Routes for pairing
-app.use('/code', pairRoute);  
-app.use('/qrCode', qrRoute);  
+app.use('/code', pairRoute);
+app.use('/qrCode', qrRoute);
 
 // Serve the pairing pages
 app.get('/pair', (req, res) => res.sendFile(path.join(__dirname, 'pair.html')));
 app.get('/qr', (req, res) => res.sendFile(path.join(__dirname, 'qr.html')));
 
-// Home Page - Full-screen, responsive layout
+// Home Page - Now with Header & Footer
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -34,28 +34,48 @@ app.get('/', (req, res) => {
       <title>Pʟᴀᴛɪɴᴜᴍ-V2 Pairing Methods</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
-        body { 
-          background: url('https://i.imgur.com/74NG4nf.jpeg') no-repeat center center/cover; 
-          height: 100vh; 
-          display: flex; 
-          flex-direction: column; 
-          align-items: center; 
-          justify-content: center; 
-          text-align: center; 
+        
+        /* Background */
+        body {
+          background: url('https://i.imgur.com/74NG4nf.jpeg') no-repeat center center/cover;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
           color: white;
         }
-        .container {
-          background: rgba(0, 0, 0, 0.6);
-          padding: 25px;
-          border-radius: 15px;
-          width: 90%;
-          max-width: 400px;
-          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-        }
-        h1 {
+
+        /* Header */
+        .header {
           font-size: 24px;
+          font-weight: bold;
+          background: linear-gradient(45deg, #ff6ec4, #7873f5, #00d4ff);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          text-transform: uppercase;
           margin-bottom: 20px;
         }
+
+        /* Glassmorphic Container */
+        .container {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 15px;
+          padding: 25px;
+          width: 90%;
+          max-width: 400px;
+          backdrop-filter: blur(10px);
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Heading */
+        h1 {
+          font-size: 22px;
+          margin-bottom: 15px;
+        }
+
+        /* Button Styles */
         .option {
           display: block;
           background: linear-gradient(135deg, #25d366, #128C7E);
@@ -67,18 +87,44 @@ app.get('/', (req, res) => {
           margin: 10px 0;
           transition: 0.3s;
         }
+
         .option:hover {
           background: linear-gradient(135deg, #128C7E, #075e54);
           transform: scale(1.05);
         }
+
+        /* Footer */
+        .footer {
+          font-size: 14px;
+          margin-top: 20px;
+          font-weight: bold;
+          background: linear-gradient(45deg, #ff0000, #ff7300, #ffeb00, #48ff00, #00ffd9, #006aff, #cc00ff);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          animation: rainbowText 4s infinite alternate;
+        }
+
+        @keyframes rainbowText {
+          0% { filter: hue-rotate(0deg); }
+          100% { filter: hue-rotate(360deg); }
+        }
       </style>
     </head>
     <body>
+
+      <!-- Header -->
+      <div class="header">Pʟᴀᴛɪɴᴜᴍ-V2 Pairing</div>
+
+      <!-- Main Content -->
       <div class="container">
         <h1>Select Pairing Method</h1>
         <a href="/pair" class="option">📞 Pair via Phone Number</a>
         <a href="/qr" class="option">📷 Pair via QR Code</a>
       </div>
+
+      <!-- Footer -->
+      <div class="footer">Made by Jupiterbold</div>
+
     </body>
     </html>
   `);
