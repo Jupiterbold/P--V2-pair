@@ -4,6 +4,7 @@ const path = require('path');
 const bodyParser = require("body-parser");
 const PORT = process.env.PORT || 8000;
 
+// Increase event listener limit
 require('events').EventEmitter.defaultMaxListeners = 500;
 
 // Import routes
