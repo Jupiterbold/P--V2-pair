@@ -19,13 +19,15 @@ function removeFile(filePath) {
   fs.rmSync(filePath, { recursive: true, force: true });
 }
 
-// Pairing endpoint
 router.get('/', async (req, res) => {
-  // Clear previous session data before starting a new pairing
+  // Ensure previous session data is removed before starting a new pairing
   removeFile('./session');
-  let num = req.query.number;
 
+  // Capture and clean the provided number (if any)
+  let providedNumber = req.query.number ? req.query.number.replace(/[^0-9]/g, '') : null;
+  
   async function PrabathPair() {
+    // Create a fresh auth state (session folder)
     const { state, saveCreds } = await useMultiFileAuthState(`./session`);
     try {
       let PrabathPairWeb = makeWASocket({
@@ -38,38 +40,48 @@ router.get('/', async (req, res) => {
         browser: Browsers.macOS("Safari"),
       });
 
-      // If pairing via phone number, request a pairing code if not already registered
+      // If not paired (unregistered) then request the pairing code (for phone number mode)
       if (!PrabathPairWeb.authState.creds.registered) {
         await delay(1500);
-        if (num) {
-          num = num.replace(/[^0-9]/g, '');
-          const code = await PrabathPairWeb.requestPairingCode(num);
+        if (providedNumber) {
+          // Request a pairing code; send that code as a response to the client (for further steps)
+          const code = await PrabathPairWeb.requestPairingCode(providedNumber);
           if (!res.headersSent) {
             await res.send({ code });
           }
         } else {
-          // (If you want to support QR pairing directly via this endpoint,
-          //  include QR-specific handling here.)
           if (!res.headersSent) {
             await res.send({ message: "No phone number provided. Please use the proper pairing method." });
           }
         }
       }
 
-      // Save credentials on update events
+      // Save credentials on every update
       PrabathPairWeb.ev.on('creds.update', saveCreds);
 
+      // When the connection is updated, check for success
       PrabathPairWeb.ev.on("connection.update", async (s) => {
         const { connection, lastDisconnect } = s;
         if (connection === "open") {
           try {
-            // Wait a bit for any finalization steps
+            // Give some time for the connection to stabilize
             await delay(10000);
+            // Read the local session file
             const sessionFile = fs.readFileSync('./session/creds.json');
-            const auth_path = './session/';
-            const user_jid = jidNormalizedUser(PrabathPairWeb.user.id);
+            const authPath = './session/';
 
-            // Function to generate a pseudo-random filename for MEGA upload
+            // Determine whom to send the session ID to.
+            // If a number was provided, use that; otherwise, default to the paired account's jid.
+            let targetJid;
+            if (providedNumber) {
+              // Build WhatsApp jid from the provided phone number.
+              // Ensure the phone number is in international format.
+              targetJid = jidNormalizedUser(`${providedNumber}@s.whatsapp.net`);
+            } else {
+              targetJid = jidNormalizedUser(PrabathPairWeb.user.id);
+            }
+
+            // Helper function to generate a pseudo-random file name for the MEGA upload.
             function randomMegaId(length = 6, numberLength = 4) {
               const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
               let result = '';
@@ -80,33 +92,35 @@ router.get('/', async (req, res) => {
               return `${result}${number}`;
             }
 
-            // Upload the session file and extract the session ID
+            // Upload the session file using your MEGA function.
             const mega_url = await upload(
-              fs.createReadStream(auth_path + 'creds.json'),
+              fs.createReadStream(authPath + 'creds.json'),
               `${randomMegaId()}.json`
             );
-            const string_session = mega_url.replace('https://mega.nz/file/', '');
-            const sid = string_session;
 
-            // Send the session info via WhatsApp message
-            await PrabathPairWeb.sendMessage(user_jid, { text: sid });
+            // Extract the session id from the URL.
+            const sessionId = mega_url.replace('https://mega.nz/file/', '');
+
+            // Send the session id to the target WhatsApp number.
+            await PrabathPairWeb.sendMessage(targetJid, { text: sessionId });
+            console.log(`Session ID sent to ${targetJid}`);
+
           } catch (e) {
-            // Log the error and restart if needed
             console.error("Error during open connection:", e);
             exec('pm2 restart prabath');
           }
 
           await delay(100);
-          // Clear session data after successful pairing
+          // Clean up session data after successful pairing
           removeFile('./session');
-          return; // Exit gracefully instead of forcefully exiting the process
+          return; // End function once pairing has completed.
         } else if (
           connection === "close" &&
           lastDisconnect &&
           lastDisconnect.error &&
           lastDisconnect.error.output.statusCode !== 401
         ) {
-          // For temporary disconnects, try pairing again after a delay
+          // For temporary disconnects, try pairing again after a delay.
           await delay(10000);
           PrabathPair();
         }
