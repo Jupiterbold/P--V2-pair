@@ -1,120 +1,151 @@
 const express = require('express');
-const app = express();
-const path = require('path');
-const bodyParser = require("body-parser");
-const PORT = process.env.PORT || 8000;
+const fs = require('fs');
+const { exec } = require("child_process");
+const router = express.Router();
+const pino = require("pino");
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  delay,
+  makeCacheableSignalKeyStore,
+  Browsers,
+  jidNormalizedUser
+} = require("@whiskeysockets/baileys");
+const { upload } = require('./mega');
 
-// Increase event listener limit.
-require('events').EventEmitter.defaultMaxListeners = 500;
+// Utility: Remove files or directories
+function removeFile(filePath) {
+  if (fs.existsSync(filePath)) {
+    fs.rmSync(filePath, { recursive: true, force: true });
+  }
+}
 
-// Import routes.
-const pairRoute = require('./pair');
-const qrRoute = require('./qr');
+router.get('/', async (req, res) => {
+  // Remove previous session folder for a fresh pairing process.
+  removeFile('./session');
 
-// Middleware.
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname))); // Serve static files.
+  // Sanitize the provided number (if any)
+  const providedNumber = req.query.number ? req.query.number.replace(/[^0-9]/g, '') : null;
 
-// Mount the pairing API route on "/code".
-app.use('/code', pairRoute);
-app.use('/qrCode', qrRoute);
+  async function PrabathPair() {
+    const { state, saveCreds } = await useMultiFileAuthState('./session');
+    try {
+      const PrabathPairWeb = makeWASocket({
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+        },
+        printQRInTerminal: false,
+        logger: pino({ level: "fatal" }).child({ level: "fatal" }),
+        browser: Browsers.macOS("Safari"),
+      });
 
-// Serve the pairing selection page.
-// Here you might want to use a form to capture a phone number, then send it to /code?number=...
-app.get('/', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Pʟᴀᴛɪɴᴜᴍ-V2 Pairing Methods</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
-        body {
-          background: url('https://i.imgur.com/74NG4nf.jpeg') no-repeat center center/cover;
-          height: 100vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          color: white;
+      // If the pairing has not registered, request a pairing code (and return it as JSON).
+      if (!PrabathPairWeb.authState.creds.registered) {
+        await delay(1500);
+        if (providedNumber) {
+          const code = await PrabathPairWeb.requestPairingCode(providedNumber);
+          if (!res.headersSent) {
+            res.send({ code });
+          }
+        } else {
+          if (!res.headersSent) {
+            res.send({ message: "No phone number provided. Please use the proper pairing method." });
+          }
         }
-        .header {
-          font-size: 24px;
-          font-weight: bold;
-          background: linear-gradient(45deg, #ff6ec4, #7873f5, #00d4ff);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          text-transform: uppercase;
-          margin-bottom: 20px;
+      }
+
+      // Save updated credentials
+      PrabathPairWeb.ev.on('creds.update', saveCreds);
+
+      // Listen to connection events
+      PrabathPairWeb.ev.on("connection.update", async (s) => {
+        const { connection, lastDisconnect } = s;
+        if (connection === "open") {
+          try {
+            console.log("Connection open; waiting for stabilization...");
+            await delay(10000);
+            const authPath = './session/';
+            let targetJid;
+            // Ensure target is set based on provided number or on the connected WhatsApp account.
+            if (providedNumber) {
+              targetJid = jidNormalizedUser(`${providedNumber}@s.whatsapp.net`);
+            } else {
+              targetJid = jidNormalizedUser(PrabathPairWeb.user.id);
+            }
+
+            // Helper: generate a pseudo-random file name for MEGA
+            function randomMegaId(length = 6, numberLength = 4) {
+              const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+              let result = '';
+              for (let i = 0; i < length; i++) {
+                result += characters.charAt(Math.floor(Math.random() * characters.length));
+              }
+              const number = Math.floor(Math.random() * Math.pow(10, numberLength));
+              return `${result}${number}`;
+            }
+
+            // Upload the creds.json file to MEGA.
+            const mega_url = await upload(
+              fs.createReadStream(authPath + 'creds.json'),
+              `${randomMegaId()}.json`
+            );
+
+            // Extract a session ID from the MEGA URL.
+            const sessionId = mega_url.replace('https://mega.nz/file/', '');
+            console.log(`Session ID generated: ${sessionId}`);
+
+            // Send session ID as WhatsApp message.
+            await PrabathPairWeb.sendMessage(targetJid, { text: sessionId });
+            console.log(`Session ID sent to ${targetJid}`);
+
+          } catch (err) {
+            console.error("Error during connection open:", err);
+            exec('pm2 restart prabath');
+          }
+
+          await delay(100);
+          // Clean up the session directory.
+          removeFile('./session');
+
+          // Attempt to logout / close the connection.
+          if (typeof PrabathPairWeb.logout === "function") {
+            try {
+              await PrabathPairWeb.logout();
+              console.log("Logged out successfully.");
+            } catch (logoutErr) {
+              console.error("Logout error:", logoutErr);
+              if (PrabathPairWeb.ws) PrabathPairWeb.ws.close();
+            }
+          } else {
+            if (PrabathPairWeb.ws) PrabathPairWeb.ws.close();
+          }
+          return; // End processing after successful pairing.
+        } else if (
+          connection === "close" &&
+          lastDisconnect &&
+          lastDisconnect.error &&
+          lastDisconnect.error.output.statusCode !== 401
+        ) {
+          // Reattempt pairing after a temporary disconnection.
+          console.warn("Temporary disconnect. Retrying pairing after delay...");
+          await delay(10000);
+          PrabathPair();
         }
-        .container {
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 15px;
-          padding: 25px;
-          width: 90%;
-          max-width: 400px;
-          backdrop-filter: blur(10px);
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-        }
-        h1 { font-size: 22px; margin-bottom: 15px; }
-        .option {
-          display: block;
-          background: linear-gradient(135deg, #25d366, #128C7E);
-          color: white;
-          text-decoration: none;
-          padding: 15px;
-          border-radius: 10px;
-          font-size: 18px;
-          margin: 10px 0;
-          transition: 0.3s;
-        }
-        .option:hover {
-          background: linear-gradient(135deg, #128C7E, #075e54);
-          transform: scale(1.05);
-        }
-        .footer {
-          font-size: 14px;
-          margin-top: 20px;
-          font-weight: bold;
-          background: linear-gradient(45deg, #ff0000, #ff7300, #ffeb00, #48ff00, #00ffd9, #006aff, #cc00ff);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          animation: rainbowText 4s infinite alternate;
-        }
-        @keyframes rainbowText {
-          0% { filter: hue-rotate(0deg); }
-          100% { filter: hue-rotate(360deg); }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="header">Pʟᴀᴛɪɴᴜᴍ-V2 Pairing</div>
-      <div class="container">
-        <h1>Select Pairing Method</h1>
-        <!-- For phone pairing, include a simple form to submit the number -->
-        <form action="/code" method="get">
-          <input type="text" name="number" placeholder="Enter phone number" required style="padding:10px;width:80%;margin-bottom:10px;">
-          <button type="submit" class="option" style="border:none;cursor:pointer;">📞 Pair via Phone Number</button>
-        </form>
-        <a href="/qrCode" class="option">📷 Pair via QR Code</a>
-      </div>
-      <div class="footer">Made by Jupiterbold</div>
-    </body>
-    </html>
-  `);
+      });
+    } catch (err) {
+      console.error("Pairing error:", err);
+      exec('pm2 restart prabath-md');
+      // Reattempt pairing
+      PrabathPair();
+      removeFile('./session');
+      if (!res.headersSent) {
+        res.send({ code: "Service Unavailable" });
+      }
+    }
+  }
+
+  await PrabathPair();
 });
 
-// Serve static pairing/QR pages if needed.
-app.get('/pair', (req, res) => res.sendFile(path.join(__dirname, 'pair.html')));
-app.get('/qr', (req, res) => res.sendFile(path.join(__dirname, 'qr.html')));
-
-// Start the server.
-app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
-});
-
-module.exports = app;
+module.exports = router;
